@@ -142,7 +142,7 @@ std::string Disassembler::AsmToCPP(ZydisDecodedInstruction instruction, uintptr_
 	case ZYDIS_MNEMONIC_LEA:
 		//LEA	r16/32,	m
 		if (instruction.operands[1].mem.base == ZYDIS_REGISTER_RIP) {
-			ss << Get64BitRegisterString(r1) << " = " << "driver.base_addr";
+			ss << Get64BitRegisterString(r1) << " = " << "baseModuleAddr";
 			if ((rip + instruction.operands[1].mem.disp.value + instruction.length) - debugger->base_address != 0)
 				ss << " + 0x" << std::hex << std::uppercase << (rip + instruction.operands[1].mem.disp.value + instruction.length) - debugger->base_address;
 		}
@@ -170,22 +170,22 @@ std::string Disassembler::AsmToCPP(ZydisDecodedInstruction instruction, uintptr_
 			case ZydisOperandType::ZYDIS_OPERAND_TYPE_MEMORY:
 				if (instruction.operands[1].mem.segment == ZYDIS_REGISTER_GS)
 				{
-					ss << Get64BitRegisterString(r1) << " = " << "driver.target_peb";
+					ss << Get64BitRegisterString(r1) << " = " << "Peb";
 				}
 				else if (instruction.operands[1].mem.base == ZYDIS_REGISTER_RIP && instruction.operands[1].mem.disp.has_displacement)
 				{
-					ss << Get64BitRegisterString(r1) << " = " << "driver.Read<uintptr_t>(driver.base_addr + 0x" << std::hex << std::uppercase << (rip + instruction.operands[1].mem.disp.value + instruction.length) - debugger->base_address << ")";
+					ss << Get64BitRegisterString(r1) << " = " << "*(uintptr_t*)(baseModuleAddr + 0x" << std::hex << std::uppercase << (rip + instruction.operands[1].mem.disp.value + instruction.length) - debugger->base_address << ")";
 				}
 				else if (stack_trace_name) {
 					ss << Get64BitRegisterString(r1) << " = " << stack_trace_name;
 				}
 				else if (instruction.operands[1].mem.disp.has_displacement)
 				{
-					ss << Get64BitRegisterString(r1) << " = driver.Read<uintptr_t>(" << Get64BitRegisterString(instruction.operands[1].mem.base) << " + 0x" << std::hex << instruction.operands[1].mem.disp.value << ")";
+					ss << Get64BitRegisterString(r1) << " = *(uintptr_t*)(" << Get64BitRegisterString(instruction.operands[1].mem.base) << " + 0x" << std::hex << instruction.operands[1].mem.disp.value << ")";
 				}
 				else
 				{
-					ss << Get64BitRegisterString(r1) << " = driver.Read<uintptr_t>(" << Get64BitRegisterString(instruction.operands[1].mem.base) << ")";
+					ss << Get64BitRegisterString(r1) << " = *(uintptr_t*)(" << Get64BitRegisterString(instruction.operands[1].mem.base) << ")";
 				}
 				break;
 			case ZydisOperandType::ZYDIS_OPERAND_TYPE_IMMEDIATE:
@@ -207,7 +207,7 @@ std::string Disassembler::AsmToCPP(ZydisDecodedInstruction instruction, uintptr_
 		// MOVSX    R15D,word ptr [RCX + R11*0x1 + 0x4dfb360]
 		if (instruction.operand_count == 2 && instruction.operands[1].mem.base != 0 && instruction.operands[1].mem.index != 0 && instruction.operands[1].mem.disp.value != 0)
 		{
-			ss << Get64BitRegisterString(r1) << " = driver.Read<uint16_t>(" << std::uppercase << Get64BitRegisterString(instruction.operands[1].mem.base) << " + " << Get64BitRegisterString(instruction.operands[1].mem.index) << " * "
+			ss << Get64BitRegisterString(r1) << " = *(uint16_t*)(" << std::uppercase << Get64BitRegisterString(instruction.operands[1].mem.base) << " + " << Get64BitRegisterString(instruction.operands[1].mem.index) << " * "
 				<< (int)instruction.operands[1].mem.scale << " + 0x" << std::hex << instruction.operands[1].mem.disp.value << ")";
 		}
 		else if (stack_trace_name) {
@@ -300,7 +300,7 @@ std::string Disassembler::AsmToCPP(ZydisDecodedInstruction instruction, uintptr_
 		}
 		else if (instruction.operands[1].mem.disp.value != 0)
 		{
-			ss << Get64BitRegisterString(r1) << " ^= " << "driver.Read<uintptr_t>(driver.base_addr + 0x" << std::hex << std::uppercase << (rip + instruction.operands[1].mem.disp.value + instruction.length) - debugger->base_address << ")";
+			ss << Get64BitRegisterString(r1) << " ^= " << "*(uintptr_t*)(baseModuleAddr + 0x" << std::hex << std::uppercase << (rip + instruction.operands[1].mem.disp.value + instruction.length) - debugger->base_address << ")";
 		}
 		else
 		{
@@ -340,7 +340,7 @@ std::string Disassembler::AsmToCPP(ZydisDecodedInstruction instruction, uintptr_
 		else if (instruction.operands[1].mem.base != 0 && instruction.operands[1].mem.disp.has_displacement)
 		{
 			if (instruction.operands[1].mem.base != ZYDIS_REGISTER_RSP && instruction.operands[1].mem.base != ZYDIS_REGISTER_RBP)
-				ss << Get64BitRegisterString(r1) << " *= " << "driver.Read<uintptr_t>(" << Get64BitRegisterString(instruction.operands[1].mem.base) << " + 0x" << std::hex << instruction.operands[1].mem.disp.value << ")";
+				ss << Get64BitRegisterString(r1) << " *= " << "*(uintptr_t*)(" << Get64BitRegisterString(instruction.operands[1].mem.base) << " + 0x" << std::hex << instruction.operands[1].mem.disp.value << ")";
 		}
 		//IMUL  RAX,RAX,0x25a3
 		else if (instruction.operand_count == 4 && instruction.operands[0].reg.value != 0 && r2 != 0 && instruction.operands[2].imm.value.s != 0)
@@ -396,9 +396,9 @@ bool Disassembler::Print_PEB()
 
 			ZydisDecodedInstruction next_instruction = Decode(current_rip);
 			if (next_instruction.mnemonic == ZYDIS_MNEMONIC_NOT)
-				printf("\t%s; \t\t//%s\n", ((std::string)ZydisRegisterGetString(instruction.operands[0].reg.value) + "= ~driver.target_peb").c_str(), DisassembledString);
+				printf("\t%s; \t\t//%s\n", ((std::string)ZydisRegisterGetString(instruction.operands[0].reg.value) + "= ~Peb").c_str(), DisassembledString);
 			else
-				printf("\t%s; \t\t//%s\n", ((std::string)ZydisRegisterGetString(instruction.operands[0].reg.value) + " = driver.target_peb").c_str(), DisassembledString);
+				printf("\t%s; \t\t//%s\n", ((std::string)ZydisRegisterGetString(instruction.operands[0].reg.value) + " = Peb").c_str(), DisassembledString);
 			ignore_trace.push_back(instruction.operands[0].reg.value);
 			return true;;
 		}
@@ -470,7 +470,7 @@ void Disassembler::Print_Decryption(std::vector<InstructionTrace>& instruction_t
 						printf("%s%s; \t\t//%s\n", print_indexing, cpp_code.c_str(), DisassembledString.c_str());
 				}
 				catch (const std::exception&) { // didn't find stack trace. use base;
-					printf("\033[1;31m%s%s; \t\t//%s -- didn't find trace -> use base\033[0m\n", print_indexing, AsmToCPP(instruction_trace[j].instruction, instruction_trace[j].rip, "driver.base_addr").c_str(), DisassembledString.c_str());
+					printf("\033[1;31m%s%s; \t\t//%s -- didn't find trace -> use base\033[0m\n", print_indexing, AsmToCPP(instruction_trace[j].instruction, instruction_trace[j].rip, "baseModuleAddr").c_str(), DisassembledString.c_str());
 					continue;
 				}
 			}
@@ -496,7 +496,7 @@ void Disassembler::Print_Decryption(std::vector<InstructionTrace>& instruction_t
 						printf("%s%s; \t\t//%s\n", print_indexing, cpp_code.c_str(), DisassembledString.c_str());
 				}
 				catch (const std::exception&) { // didn't find stack trace. use base;
-					printf("\033[1;31m%s%s; \t\t//%s -- didn't find trace -> use base\033[0m\n", print_indexing, AsmToCPP(instruction_trace[j].instruction, instruction_trace[j].rip, "driver.base_addr").c_str(), DisassembledString.c_str());
+					printf("\033[1;31m%s%s; \t\t//%s -- didn't find trace -> use base\033[0m\n", print_indexing, AsmToCPP(instruction_trace[j].instruction, instruction_trace[j].rip, "baseModuleAddr").c_str(), DisassembledString.c_str());
 					continue;
 				}
 			}
@@ -644,7 +644,7 @@ void Disassembler::Dump_Switch()
 
 void Disassembler::PrintRegisters()
 {
-	printf("\tconst uint64_t mb = driver.base_addr;\n");
+	printf("\tconst uint64_t mb = baseModuleAddr;\n");
 	printf("\tuint64_t rax = mb, rbx = mb, rcx = mb, rdx = mb, rdi = mb, rsi = mb, r8 = mb, r9 = mb, r10 = mb, r11 = mb, r12 = mb, r13 = mb, r14 = mb, r15 = mb;\n");
 }
 
